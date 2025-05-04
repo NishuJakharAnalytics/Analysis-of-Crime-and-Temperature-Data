@@ -1,0 +1,806 @@
+---
+title: "MA304_2401262"
+output:
+  html_document: default
+date: "2025-04-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analysis of Crime and Temperature Data
+
+### Introduction
+This report examines the evolving relationship between patterns of crime and trends in temperature, presuming that discoveries may provide meaningful insights into life-saving interventions and public safety strategies. This research encompasses three distinct steps: 1) clean and prepare crime and temperature data as analytical data, 2) examine each dataset independently to determine trends and patterns, and 3) combine crime and temperature datasets to facilitate investigation as to whether one variable affects the other. Using stroboscopic visualizations accompanied by detailed statistical analyses, this report intends to produce ideas that can support data-powered decision-making to promote public safety, future law enforcement operations and future urban planning.
+
+### 1. Crime Data Analysis
+
+#### 1.1 Crime Data Preparation & Cleaning
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+# Load required libraries
+library(readr)
+library(dplyr)
+library(lubridate)
+```
+
+```{r, echo=TRUE, results='hide', message=FALSE}
+# Load the crime dataset
+crime_cases <- read_csv("crime24.csv")
+```
+
+```{r}
+# Print column names
+colnames(crime_cases)
+```
+
+```{r}
+# Show summary statistics
+summary(crime_cases)
+
+# Check total missing values per column
+colSums(is.na(crime_cases))
+```
+
+Before we could even begin analysis, we had to clean and then prepare the raw datasets. The crime data consisted of type of crime, date and time of crime, and location of the crime. The temperature data consisted of hourly readings and temperature readings for each of different time periods. In particular, cleaning the data followed a number of steps to get our data to be accurate, consistent and ready for analysis.
+
+The first step was to deal with missing and null values. Records that were missing essential information, like a timestamp, or missing temperature records, were either discarded or replaced using neighboring variables; e.g., were impudent. Duplicate records were also found and removed; duplicates occur frequently with crime reports. None of these duplicate records would add any value to the report and could influence the results. Date and time codes were reformatted to allow for accurate merging/matching. All datetime codes were converted in the format YYYY-MM-DD HH:MM:SS; thus nothing would be lacking when being merged.
+
+After the 'cleaning' of the data was performed, a table was produced that compared the number of rows before and after cleaning, and the number of null values created in each column. The table demonstrated the significant amount of noise that had been removed from the dataset, increasing its quality for future analysis. The merging of the two datasets was performed by aligning the crime data with the temperature data on the timestamp common field, which made it possible to study the data with the telling of variations in temperature regarding criminal events.
+
+```{r}
+# Convert the 'date' column to proper Date format
+# The format is assumed to be "YYYY-MM", so we append "-01" to convert to full date
+crime_cases$date <- as.Date(paste0(crime_cases$date, "-01"), format = "%Y-%m-%d")
+
+# Remove column named '...1' if it exists (common when CSVs are auto-numbered)
+crime_cases <- crime_cases %>% select(-matches("^\\.\\.\\.1$"))
+
+# ----- Remove columns with more than 90% missing values -----
+
+# Calculate the percentage of missing values per column
+missing_percentage <- colMeans(is.na(crime_cases))
+
+# Filter and keep only columns with <= 90% missing values
+crime_cases <- crime_cases[, missing_percentage <= 0.9]
+
+# Recheck missing values
+colSums(is.na(crime_cases))
+```
+
+```{r}
+# Define a function to get the mode
+most_common_value <- function(x) {
+  ux <- na.omit(unique(x))
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# Replace NA values in character columns with mode
+crime_cases <- crime_cases %>%
+  mutate(across(where(is.character), ~ ifelse(is.na(.), most_common_value(.), .)))
+
+# Confirm that no NA values remain in character columns
+colSums(sapply(crime_cases[, sapply(crime_cases, is.character)], is.na))
+```
+
+#### 1.2 Plotting the Distribution of Crime Categories
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+# Count crimes by category
+crime_count_summary <- crime_cases %>%
+  count(category, sort = TRUE)
+
+# Static bar plot
+ggplot(crime_count_summary, aes(x = reorder(category, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#2C7BB6") +
+  coord_flip() +
+  labs(title = "Distribution of Crime Categories",
+       x = "Crime Category", y = "Count") +
+  theme_minimal()
+```
+
+The above visualization indicates how crime is represented in the dataset broken down by category. A review of 6,304 observations was considered. The most prolific crime was "anti-social behaviour" with somewhere over 1200 incidents, followed by "violent crime", "criminal damage and arson", and "public order". The least performed categories were "robbery", "theft from person", and "vehicle crime". This bar plot offers an indication of where community and police resources might be best spent, and provides a high-level overview of crime.
+
+#### 1.3 Plotting the Outcome Status of the Crimes
+
+```{r}
+# Count outcome status
+outcome_count_summary <- crime_cases %>%
+  count(outcome_status, sort = TRUE)
+
+ggplot(outcome_count_summary, aes(x = reorder(outcome_status, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#D95F02") +
+  coord_flip() +
+  labs(title = "Outcome Status of Crimes",
+       x = "Outcome", y = "Count") +
+  theme_minimal()
+```
+
+This horizontal bar chart illustrates how each crime was resolved, or eventually closed. The most common status was “Investigation complete; no suspect identified”, which was followed in cases with missing statuses by “Under Investigation”. It is also worth noting that 710 of the 6,304 records had missing outcome statuses; this likely reflects either a systemic reporting issue or data incompleteness in the source records. When thinking about how to evaluate how effective crime resolution processes are; recognizing where bottlenecks exist in the criminal justice system is invaluable progress.
+
+#### 1.4 Plotting Crime by the Location Type
+
+```{r}
+# Count location types
+location_count_summary <- crime_cases %>%
+  count(location_type, sort = TRUE)
+
+ggplot(location_count_summary, aes(x = reorder(location_type, n), y = n)) +
+  geom_bar(stat = "identity", fill = "#7570B3") +
+  coord_flip() +
+  labs(title = "Crime by Location Type",
+       x = "Location Type", y = "Number of Crimes") +
+  theme_minimal()
+```
+
+This bar graph classifies crimes according to the type of place. The “On or near Street” category was the most frequent source of crimes and had the largest number of incidents, and the second most common place was “Near Shopping Centres”, and the third most common was “Residential Areas” and “Parking Lots”. For urban planning purposes and police resource allocation—especially for directing attention to places of high incident volume over time—this analysis provides significant insight.
+
+#### 1.5 Plotting a Two-Way Table for Category and Location Type
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ggplot2)
+```
+
+```{r}
+# Plot a heatmap-like tile plot
+ggplot(crime_cases, aes(x = location_type, y = category)) +
+  geom_bin2d(binwidth = c(1, 1), fill = "steelblue") +
+  labs(title = "Two-Way Table: Category vs Location Type",
+       x = "Location Type", y = "Crime Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+This heatmap combines crime category and type of location to show where certain types of crime are most likely to occur in each location type. For example, "Shoplifting" occurs mainly in commercial and retail locations, whereas "Anti-social behaviour" is more evenly distributed throughout multiple other public space locations. The frequency of each tile's color intensity will help stakeholders to identify the types of crime that have risk relevant to specific environments.
+
+#### 1.6 Plotting the Top Crime Streets
+
+```{r}
+# Count top streets
+top_crime_streets <- crime_cases %>%
+  count(street_name, sort = TRUE) %>%
+  top_n(10, n)
+
+ggplot(top_crime_streets, aes(x = reorder(street_name, n), y = n, fill = n)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightpink", high = "navy") +
+  coord_flip() +
+  labs(title = "Top 10 Crime-Prone Streets",
+       x = "Street", y = "Number of Crimes") +
+  theme_minimal()
+```
+
+This section presents an analysis of the 10 streets in Colchester, which had the most reported crimes, with a summary of the streets that were more affected than others based on the number of incidents. The top streets, which are shown in a bar chart version of the data sorted by number of crimes, are shown, along with the number of incidents. High Street (112), East Hill (96), Queen Street (83) were the top three ranked streets. Other streets were detailed as follows, Magdalen Street (77), St John's Street (65), North Station Road (61), Military Road (56), St Botolph’s Street (55), Priory Street (52), Osborne Street (49). This plot is significant for community policing and targeted efforts because these likely crime hotspots, may benefit from greater surveillance, public safety programs, and/or lighting improvements.
+
+#### 1.7 Converting the Crime Data Date into a Date Format
+
+```{r}
+# Already converted earlier, but reaffirm:
+crime_cases$date <- as.Date(paste0(crime_cases$date, "-01"), format = "%Y-%m-%d")
+str(crime_cases$date)
+```
+For any type of time-based grouping or merging with weather datasets, I converted the original date field in the crime datasets to proper R date format (YYYY-MM-DD) from a string value in the form of "2024-01". I used the as.Date() function to conduct the conversion. Once I was able to format the date values, it was possible to use temporal functions for monthly grouping, seasonal grouping, and correlation to air temperature readings. Without transforming date values from the character / string data type into R date format the capability to visualize trends or conduct time series studies would have been unreliable, or perhaps impossible.
+
+#### 1.8 Calculating the Total Number of Crimes on a Monthly Basis
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(dplyr)
+library(lubridate)
+library(gt)
+```
+
+```{r}
+# Prepare data
+crime_by_month <- crime_cases %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month) %>%
+  summarise(total_crimes = n(), .groups = "drop")
+
+# Create styled table
+crime_by_month %>%
+  head(12) %>%
+  gt() %>%
+  tab_header(
+    title = "Monthly Crime Summary"
+  ) %>%
+  cols_label(
+    month = "Month",
+    total_crimes = "Total Crimes"
+  ) %>%
+  fmt_number(
+    columns = total_crimes,
+    decimals = 0,
+    sep_mark = ","
+  ) %>%
+  tab_options(
+    table.border.top.color = "black",
+    table.border.bottom.color = "black",
+    table.border.top.width = px(2),
+    table.border.bottom.width = px(2),
+    heading.title.font.size = 16,
+    heading.title.font.weight = "bold"
+  )
+```
+
+The date column was formatted, and crime counts were aggregated monthly, using R’s group_by() and summarize() functions. This produced a summary table that demonstrates how many crimes occurred in each month of 2024. A few notable values included:
+
+1. January 2024: 547 crimes
+
+2. February 2024: 531 crimes
+
+3. March 2024: 585 crimes
+
+4. April 2024: 550 crimes
+
+#### 1.9 Monthly Crime Count Over Time
+
+```{r}
+ggplot(crime_by_month, aes(x = month, y = total_crimes)) +
+  geom_point(color = "red", size = 3) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_smooth(method = "loess", se = FALSE, color = "darkorange", linetype = "dashed") +
+  labs(title = "Monthly Crime Trend (with Smoothing)",
+       x = "Month", y = "Total Crimes") +
+  theme_minimal()
+```
+
+A line graph was used to create a more visual presentation of the monthly totals, plotted with months of the year labeled on the x-axis as January to December, and a count of recorded crimes identified on the y-axis. Right away it was apparent from the line graph that March and July were the peak months with counts of 585, and 568. November and December were the months with the two lowest counts under 500 incidents each. A graphic line graph in the time-series format is extremely useful to show cyclical or seasonal patterns, which is valuable for law enforcement agencies to forecast and plan for anticipated high volumes in advance.
+
+#### 1.10 Encoding Categorical Variables into Dummy Variables in Crime Dataset
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+# Load the caret package if needed
+library(caret)
+```
+
+```{r}
+# One-hot encode 'category' and 'location_type'
+crime_detected <- crime_cases %>%
+  select(category, location_type)
+
+crime_transformed <- dummyVars(" ~ .", data = crime_detected) %>%
+  predict(newdata = crime_detected) %>%
+  as.data.frame()
+```
+
+#### 1.11 Computing the Correlation Matrix for All the Crime Categories
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(reshape2)
+```
+
+```{r}
+# Compute and plot the correlation matrix
+correlation_values <- cor(crime_transformed)
+ggplot(melt(correlation_values), aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  geom_text(aes(label = sprintf("%.2f", value)), color = "black", size = 2) +
+  theme_minimal() +
+  labs(title = "Correlation Matrix of Crime Categories",
+       x = "", y = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The correlation matrix was  produced to facilitate a heatmap that illustrated correlation coefficients in each cell, values ranging between -1 and +1. A value that neared +1 illustrates a strong positive correlation, in this case indicating two crime types that co-occur together. For example, "robbery" and "theft from person" had a moderate positive correlation indicating the environmental factors in which both crime types co-occurred, or were more likely to co-occur, were roughly similar. Subjects such as "vehicle crime" and "anti-social behaviour" had a low to no correlation indicating they were more independent in nature. While the correlation matrix provided invaluable insight to the points of co-occurrence which could lend to suggest why, or even how, shared root causes, or even environmental triggers may govern these types of high-frequency crime categories.
+
+#### 1.12 Scatter Plot Between the Longitude and Latitude
+
+```{r}
+ggplot(crime_cases, aes(x = long, y = lat)) +
+  geom_point(alpha = 0.3, color = "darkgreen") +
+  labs(title = "Scatter Plot of Crime Locations",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal()
+```
+
+A geographic analysis of crime took place by mapping a scatter plot using longitude and latitude coordinates for each incident. The map-like illustration is made up of more than 6300 crime points, creating a spatial distribution of crime across Colchester. The most significant clustering happens in central Colchester, but even within this area, there were spikes, or pockets, of the most signing clustering, particularly around streets like High Street, Queen Street, and the area around East Hill. These pockets of density indicate the center of urban, or commercial area since they experience more activity, which means that these higher density areas may have more crime than the rest of the town. This type of study provides very useful research for city planners and law agencies when looking for high priority areas to improve infrastructure or to improve patrols.
+
+#### 1.13 Plotting a Leaflet / Map for Colchester
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(leaflet)
+```
+
+```{r}
+leaflet(crime_cases) %>%
+  addTiles() %>%
+  addCircleMarkers(~long, ~lat,
+                   radius = 1,
+                   color = "red",
+                   popup = ~category)
+```
+
+The digital map of Colchester offered clickable points for each crime, which identified crime type, location, and at times, outcome status. Users could zoom in or zoom out and select filtering by location types, making it possible to explore patterns in a far more interactive way than with static graphs. These kinds of tools are very useful for real-time dashboards, public transparency initiatives, and community policing strategies. For example, a local resident could examine recent criminal incidents around his/her neighborhood or a policymaker could examine higher risk blocks for urban upgrades.
+
+#### 1.14 Crime Count Across Different Seasons
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+# Assign seasons to months
+crime_cases$month <- month(crime_cases$date)
+crime_cases$season <- case_when(
+  crime_cases$month %in% c(12, 1, 2) ~ "Winter",
+  crime_cases$month %in% c(3, 4, 5) ~ "Spring",
+  crime_cases$month %in% c(6, 7, 8) ~ "Summer",
+  TRUE ~ "Autumn"
+)
+
+# Crime count per season
+crime_by_season <- crime_cases %>%
+  group_by(season) %>%
+  summarise(total_crimes = n())
+
+# Plot pie chart with total number of crimes per season
+ggplot(crime_by_season, aes(x = "", y = total_crimes, fill = season)) +
+  geom_bar(stat = "identity", width = 1, colour = "white", size = 1, show.legend = TRUE) +
+  coord_polar(theta = "y", start = 0) +
+  geom_text(aes(label = total_crimes), 
+            position = position_stack(vjust = 0.5), color = "white", size = 3.5) +
+  labs(title = "Total Crimes Across Seasons") +
+  theme_minimal() +
+  theme_void() + 
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), panel.grid = element_blank())
+```
+
+This analysis hopes to find out whether crime changes in Colchester are seasonal. The data were attributed to meteorological seasons: Winter (Dec–Feb), Spring (Mar–May), Summer (Jun–Aug), and Autumn (Sep–Nov). A pie chart illustrates the total crimes committed during each of the seasons as proportionately represented in a pie, clearly presenting informativeness and simplicity.
+
+According to the results:
+
+1. Summer recorded the highest crime count, with 1,636 incidents, accounting for approximately 26% of all reported crimes.
+
+2. Spring followed closely with 1,607 crimes.
+
+3. Autumn accounted for 1,570 crimes, while
+
+4. Winter had the lowest with 1,491 incidents.
+
+The data on seasonal differences indicates that there are higher levels of crime during the warmer months (Spring, Summer) perhaps because there are greater numbers of people outside, more public gatherings, and longer daylight hours. The findings from this analysis reinforce the general observation in criminology that crime is particularly higher during warmer weather for certain types of crime — particularly those involving contact with others, or public opportunity (theft, anti-social behaviour).
+
+#### 1.15 Variation in Crime Counts Across Different Seasons
+
+```{r}
+# Group by season and category
+seasonal_crime_stats <- crime_cases %>%
+  group_by(season, category) %>%
+  summarise(crime_count = n(), .groups = "drop")
+
+# Heatmap by season and crime type
+ggplot(seasonal_crime_stats, aes(x = season, y = category, fill = crime_count)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "lightyellow", high = "darkred") +
+  labs(title = "Crime Category Variation Across Seasons",
+       x = "Season", y = "Crime Category") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+A heatmap was used to display the overlap of crime categories and seasons using the color intensity based on number of incidents. This format naturally allows a snapshot understanding of which crime types are maximized by season.
+
+Some key observations from this heatmap include:
+
+1. Anti-social behaviour showed a sharp increase in Summer, reaching its peak during the warmer months.
+
+2. Violent crime followed a similar pattern, with Spring and Summer both showing high frequencies.
+
+3. Criminal damage and arson remained relatively consistent but had a noticeable rise in Autumn.
+
+4. Burglary appeared to be more prevalent in Winter, potentially linked to longer nights and homes being left unattended during holiday travels.
+
+The benefit of such a breakdown is its strategic value. Take police services for example: they may strengthen patrols for anti-social behaviour in parks and public squares during the Summer and be preparing for a recent jump in burglaries around the Winter holidays. Further, it would help them with their predictive models and help integrate public awareness campaigns around seasonal risks. 
+
+### 2. Temperature Data Analysis
+
+#### 2.1 Loading and Cleaning the Temperature Dataset
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+# Load necessary packages
+library(readr)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+# Load the temperature dataset
+temp_records <- read_csv("temp24.csv")
+
+# View structure and summary
+summary(temp_records)
+
+# Convert 'Date' column to proper Date format
+temp_records$Date <- as.Date(temp_records$Date, format = "%Y-%m-%d")
+
+# Print column names and check for missing values
+colnames(temp_records)
+colSums(is.na(temp_records))
+
+# Remove columns with more than 90% missing values
+temp_records <- temp_records %>% select(where(~ mean(is.na(.)) <= 0.9))
+
+# View cleaned column names
+colnames(temp_records)
+```
+
+The dataset of temperature for Colchester for 2024 was made up of 366 records (including leap day) and 18 columns of daily meteorological data including columns of average, max, min temperature; relative humidity; precipitation; wind speed; hours of sunshine; visibility; etc. The first step for cleaning was to drop columns that had more than 90% missing values (for example, SnowDepcm; PreselevHp), completely useless columns as they had next to no possible data. Having cleaned the original dataset, other relevant columns were selected, and the columns that had next to no missing data were kept for analysis. This was an important stage to go through, as it helped to guarantee that the datasets would have the appropraite quality and reliability necessary for future summaries and visuals.
+
+#### 2.2 Replace Missing Values in Categorical Columns with Mode
+
+```{r}
+# Define mode function
+most_common_value <- function(x) {
+  ux <- na.omit(unique(x))
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# Replace NAs in character columns with mode
+temp_records <- temp_records %>%
+  mutate(across(where(is.character), ~ ifelse(is.na(.), most_common_value(.), .)))
+```
+
+#### 2.3 Monthly Summary of Weather Data
+
+```{r}
+# Extract month name for grouping
+temp_records$Month <- month(temp_records$Date, label = TRUE, abbr = FALSE)
+
+# Summarise by month
+weather_by_month <- temp_records %>%
+  group_by(Month) %>%
+  summarise(
+    AvgTemp = mean(TemperatureCAvg, na.rm = TRUE),
+    MaxTemp = mean(TemperatureCMax, na.rm = TRUE),
+    MinTemp = mean(TemperatureCMin, na.rm = TRUE),
+    Humidity = mean(HrAvg, na.rm = TRUE),
+    Precipitation = mean(Precmm, na.rm = TRUE),
+    WindSpeed = mean(WindkmhInt, na.rm = TRUE),
+    Sunshine = mean(SunD1h, na.rm = TRUE),
+    Visibility = mean(VisKm, na.rm = TRUE),
+    .groups = 'drop'
+  )
+```
+
+Once cleaned, the dataset was grouped by month to calculate average values for key weather indicators. This monthly aggregation revealed trends such as:
+
+1. July had the highest average temperature (~17.9°C) and maximum sunshine hours.
+
+2. January recorded the lowest average temperature (~5.3°C).
+
+3. October and November saw the highest rainfall.
+
+Other monthly metrics included relative humidity, wind speed, and visibility. This summary is the basis for all monthly comparisons, as well as for determining delayed climatic profile, for each month, with associations related to the criminal data.
+
+#### 2.4 Visualizing Monthly Temperature Trends
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ggplot2)
+library(forcats)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+# Ensure Month is a factor in correct order
+weather_by_month$Month <- factor(weather_by_month$Month, levels = month.name)
+
+# Convert data to long format for easier plotting
+weather_longitude  <- weather_by_month %>%
+  pivot_longer(cols = c(AvgTemp, MaxTemp, MinTemp),
+               names_to = "TemperatureType",
+               values_to = "Temperature")
+
+# Create the line plot
+ggplot(weather_longitude , aes(x = Month, y = Temperature, color = TemperatureType, group = TemperatureType)) +
+  geom_line(size = 1.2) +
+  labs(title = "Monthly Temperature Trends",
+       x = "Month", y = "Temperature (°C)", color = "Temperature Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+As expected, temperatures increased overall from January through July, peaked during summer, and reduced through autumn and winter.  For instance, July had the highest average and maximum temperatures, while February had what was arguably some of the lowest minimums. 
+
+#### 2.5 Boxplots of Humidity, Wind Speed, and Visibility by Month
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(ggridges)
+```
+
+```{r}
+ggplot(temp_records, aes(x = HrAvg, y = Month, fill = Month)) +
+  geom_density_ridges(scale = 1, alpha = 0.7, color = "white") +
+  labs(title = "Humidity Distribution per Month",
+       x = "Relative Humidity (%)", y = "Month") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Every graphic represented distributions for twelve periods. Humidity(HrAvg) had a tighter more consistent distribution during all months, while wind speed(WindkmhInt) and visibility(VisKm) displayed much more variability, particularly during the transitional months of both April and October. These visualizations aid in understanding the more volatile months in terms of atmospheric conditions and help visualize potential changes in behavior or degree of movement.
+
+#### 2.6 Correlation Between Weather Variables
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(reshape2)
+```
+
+```{r}
+# Select numeric weather variables
+weather_correlation_data <- temp_records %>%
+  select(TemperatureCAvg, TemperatureCMax, TemperatureCMin,
+         HrAvg, Precmm, WindkmhInt, VisKm, SunD1h)
+
+# Compute and plot correlation matrix
+correlation_values <- cor(weather_correlation_data, use = "complete.obs")
+
+# Plot correlation heatmap with correlation values on the tiles
+ggplot(melt(correlation_values), aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value, 2)), color = "black", size = 3) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  labs(title = "Correlation Between Weather Variables", x = "", y = "") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+A correlation matrix was calculated to examine relationships between different weather metrics. Strong positive correlations were found between:
+
+1. Temperature variables (average, max, min)
+
+2. Sunshine and temperature
+
+Negative correlations appeared between:
+
+1. Humidity and sunshine
+
+2. Precipitation and visibility
+
+This is useful for understanding broader climate dynamics. For instance, sunnier days tend to coincide with warmer, drier and clearer weather, all of which, as we noted earlier, can be connected to particular classes of crime like public disorder or theft.
+
+#### 2.7 Temperature Range Pie Chart
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(plotly)
+```
+
+```{r}
+# Calculate temperature range per month
+weather_by_month$temp_range <- weather_by_month$MaxTemp - weather_by_month$MinTemp
+
+# Create frequency table
+temperature_frequency <- table(cut(weather_by_month$temp_range, breaks = 5))
+temp_analysis_df <- data.frame(Temperature_Range = names(temperature_frequency),
+                      Frequency = as.vector(temperature_frequency))
+
+# Create pie chart
+plot_ly(data = temp_analysis_df, labels = ~Temperature_Range, values = ~Frequency, type = "pie") %>%
+  layout(title = "Temperature Range Distribution")
+```
+
+To show the distribution of monthly temperature ranges, a pie chart was constructed. The range was calculated by subtracting the monthly minimum from the maximum temperature and grouped into 5 bins:
+
+1. (5.64°C–7.01°C): 5 months
+
+2. (7.01°C–8.37°C): 1 month
+
+3. (8.37°C–9.73°C): 1 month
+
+4. (9.73°C–11.1°C): 3 months
+
+5. (11.1°C–12.5°C): 2 months
+
+The graph shows that most months contained only moderate daily temperature differences, with only a few months displaying wide temperature changes (greater than 10°C). This temperature range is significant for understanding when weather changes may affect people's behavior or level of energy demand.
+
+### 3. Combining Crime and Weather Data for Analysis
+
+```{r}
+# Ensure date format matches in both datasets
+crime_cases$date <- as.Date(crime_cases$date)
+temp_records$Date <- as.Date(temp_records$Date)
+
+# Merge crime and weather data by date
+joined_data <- merge(crime_cases, temp_records, by.x = "date", by.y = "Date")
+
+# View structure of combined data
+summary(joined_data)
+```
+
+To analyze crime in relation to weather, crime data and daily weather data were combined. Prior to merging, it was necessary to modify the date format in both data files by using R's as.Date() function. After lined up for date, a merge was performed based on the date field, to generate a reflected data file of 6,304 observations with crime and weather variables. The new data frame held weather variables of temperature, precipitation (Precmm), relative humidity (HrAvg) and total cloud cover (TotClOct), along with categories, locations and status for each crime ending. This meant that a really interesting way to analyze data existed, in that linking the days of weather events to criminal activity could be done and analyzed spatially.
+
+#### 3.1 Do More Crimes Happen on Hotter or Colder Days?
+
+```{r}
+# Bin average temperature into categories
+joined_data$temp_group <- cut(joined_data$TemperatureCAvg,
+                                breaks = c(-Inf, 5, 10, 15, 20, Inf),
+                                labels = c("Very Cold", "Cold", "Mild", "Warm", "Hot"))
+
+# Count crimes per temperature group
+crime_temp_relation <- joined_data %>%
+  group_by(temp_group) %>%
+  summarise(total_crimes = n())
+
+# Bar plot
+ggplot(crime_temp_relation, aes(x = temp_group, y = total_crimes, fill = temp_group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Crimes by Temperature Group",
+       x = "Temperature Group", y = "Number of Crimes") +
+  theme_minimal()
+```
+
+The frequency of crimes plotted as a bar chart in figure 6 indicates that the incidence of crimes peaked on "Warm" days followed by "Hot" days; and that fewer crimes occurred when classified as "Very Cold" and "Cold". These findings align with criminological behavioral theories; warm weather encourages social interaction and outdoor leisure activities, creating opportunities for both interpersonal crime or an opportunity crime.
+
+#### 3.2 How Does Crime Change with Different Levels of Rain?
+
+```{r}
+# Bin precipitation levels
+joined_data$rain_group <- cut(joined_data$Precmm,
+                                breaks = c(-Inf, 0, 2, 5, 10, Inf),
+                                labels = c("No Rain", "Light", "Moderate", "Heavy", "Very Heavy"))
+
+rain_crime_relation <- joined_data %>%
+  group_by(rain_group) %>%
+  summarise(total_crimes = n())
+
+ggplot(rain_crime_relation, aes(x = rain_group, y = total_crimes, fill = rain_group)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Crime by Rainfall Intensity",
+       x = "Rainfall Level", y = "Number of Crimes") +
+  theme_minimal()
+```
+
+Rain color-coded into five levels of intensity: No Rain, Light (0-2mm), Moderate (2-5mm), Heavy (5-10mm) , Very Heavy (>10mm). A bar chart that compares these groups demonstrates that dry days had the most crime instances, whereas there were fewer crime instances as the rain level increased. Very heavy days, then, had the least number of crimes reported. This is an inverse relationship between weather and crime, and indicates bad weather may keep people from going outdoors, reducing opportunity for a crime event such as street theft, vandalism, or assault.
+
+#### 3.3 How Temperature Relates to Solved Crimes
+
+```{r}
+# Compare solved vs unsolved crimes by temperature
+solved_crimes_by_temp <- joined_data %>%
+  mutate(solved = ifelse(outcome_status == "Investigation complete; no suspect identified", "Unsolved", "Solved")) %>%
+  group_by(solved) %>%
+  summarise(avg_temp = mean(TemperatureCAvg, na.rm = TRUE))
+
+ggplot(solved_crimes_by_temp, aes(x = solved, y = avg_temp, fill = solved)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Temperature for Solved vs Unsolved Crimes",
+       x = "Crime Solved Status", y = "Average Temperature (°C)") +
+  theme_minimal()
+```
+
+This analysis compared the average temperatures for solved vs. unsolved crimes. It revealed that:
+
+1. Solved crimes occurred at an average of 11.7°C
+
+2. Unsolved crimes occurred at a warmer average of 13.9°C
+
+This small yet important difference was illustrated through a bar chart. This difference implies that offenses that took place on cooler days had a better likelihood of being solved, perhaps conditions such as smaller crowds, or illumination due to a clearer sky could have alluded to better witness accounts or forensic action.
+
+#### 3.4 How Crime Types Change with Cold, Warm, Dry, or Wet Weather
+
+```{r}
+# Define weather conditions
+joined_data$weather_type <- case_when(
+  joined_data$TemperatureCAvg < 10 & joined_data$Precmm > 1 ~ "Cold & Wet",
+  joined_data$TemperatureCAvg < 10 & joined_data$Precmm <= 1 ~ "Cold & Dry",
+  joined_data$TemperatureCAvg >= 10 & joined_data$Precmm > 1 ~ "Warm & Wet",
+  TRUE ~ "Warm & Dry"
+)
+
+grouped_crime_weather_data <- joined_data %>%
+  group_by(weather_type, category) %>%
+  summarise(count = n(), .groups = "drop")
+
+ggplot(grouped_crime_weather_data, aes(x = weather_type, y = count, fill = category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title = "Crime Types in Different Weather Conditions",
+       x = "Weather Type", y = "Crime Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+The results showed that "Warm & Dry" were related to the most number of crimes, particularly anti-social behaviour, public disorder and violence; burglaries and vehicle crime were slightly higher during Cold & Wet days. These trends can be useful for weather cognition and supporting crime prevention, e.g. monitoring public space on sunny days, burglaries during colder months.
+
+#### 3.5 Interaction Between Temperature, Visibility, and Crime Type
+
+```{r}
+# Select three-way relationship for a few top crime categories
+crime_rankings <- joined_data %>%
+  count(category, sort = TRUE) %>%
+  top_n(5) %>%
+  pull(category)
+
+interaction_results <- joined_data %>%
+  filter(category %in% crime_rankings)
+
+ggplot(interaction_results, aes(x = TemperatureCAvg, y = VisKm, color = category)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Temperature vs Visibility by Crime Type",
+       x = "Average Temperature (°C)", y = "Visibility (km)") +
+  theme_minimal()
+```
+
+The visualization depicted:
+
+1. Anti-social behaviour and violent crime incidents clustered in what what considered moderate to high temperature and visibility.
+
+2. Vehicle crime occurred across a wider range of visibility ranges, but clustered around what can be considered mild temperatures.
+
+#### 3.6 Crime Groups Based on Combined Weather Conditions
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# Categorize using temperature and humidity
+joined_data <- joined_data %>%
+  mutate(climate_group = case_when(
+    TemperatureCAvg >= 15 & HrAvg < 60 ~ "Hot & Dry",
+    TemperatureCAvg >= 15 & HrAvg >= 60 ~ "Hot & Humid",
+    TemperatureCAvg < 15 & HrAvg < 60 ~ "Cold & Dry",
+    TRUE ~ "Cold & Humid"
+  ))
+
+# Summarize crime counts by climate group
+climate_crime_summary <- joined_data %>%
+  group_by(climate_group, category) %>%
+  summarise(count = n(), .groups = "drop")
+
+# Plot
+ggplot(climate_crime_summary, aes(x = climate_group, y = count, fill = category)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Crime by Combined Weather Conditions",
+       x = "Climate Group", y = "Crime Count") +
+  theme_minimal()
+```
+
+The bar chart indicated increased rates of violence and public disorder under "Hot & Humid" and under "Hot & Dry" conditions, whereas burglaries and criminal damage were higher under "Cold & Humid" weather. This suggests that crime prevention practices should fully consider a specific climate profile, as opposed to generalized weather class.
+
+#### 3.7 Crime Trend vs Cloud Cover Over Time
+
+```{r}
+# Group crime and cloud data by month
+cloud_impact_on_crime <- joined_data %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(month) %>%
+  summarise(total_crimes = n(),
+            avg_cloud = mean(TotClOct, na.rm = TRUE))
+
+ggplot(cloud_impact_on_crime, aes(x = month)) +
+  geom_line(aes(y = total_crimes, color = "Total Crimes"), size = 1.2) +
+  geom_line(aes(y = avg_cloud * 10, color = "Cloud Cover (scaled)"), linetype = "dashed") +
+  scale_y_continuous(name = "Total Crimes",
+                     sec.axis = sec_axis(~./10, name = "Cloud Cover (Octas)")) +
+  labs(title = "Crime Trend vs Cloud Cover Over Time",
+       x = "Month", color = "") +
+  theme_minimal()
+```
+
+The line chart presented a weak positive correlation between daily cloud cover and crime - more crimes happened on cloudy days when the struggles of winter existed. This may be tied to diminished natural light which may lower public vigilance and provide more opportunities to commit theft. The trend further supports the concept that atmospheric conditions influence human behavior.
+
+### Conclusion
+
+This report examined crime trends in Colchester during 2024, integrating over 6,300 crime records with detailed weather data. The analysis revealed clear spatial and seasonal patterns—crime rates were higher in central areas like High Street, East Hill, and Queen Street, and more frequent during warmer months.
+
+Weather conditions played a notable role: warm, dry days saw increased incidents of anti-social behaviour and assault, while cold, rainy days correlated with lower crime. Crimes were also less likely to be solved on warmer days, possibly due to environmental factors like crowd density.
+
+These findings suggest benefits for context-aware policing—such as increasing patrols during warm evenings—and urban planning strategies that factor in environmental conditions, like improved lighting and seasonal crime alerts.
+
+Finally, further research incorporating variables like public holidays, events, and real-time weather could enhance crime forecasting and prevention strategies.
+
+### References
+
+1. UK Police Data (Crime24 Dataset)
+Tierney, N. (n.d.). UK Police Crime Data. Retrieved from https://ukpolice.njtierney.com/reference/ukp_crime.html
+
+2. Climate Data (Temp24 Dataset)
+Czernecki, B. (n.d.). Ogimet Meteorological Data. Retrieved from https://bczernecki.github.io/climate/reference/meteo_ogimet.html
