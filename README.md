@@ -47,6 +47,7 @@ The datasets are combined to analyze the relationship between temperature trends
   ```R
   install.packages(c("tidyverse", "ggplot2", "dplyr", "scales", "knitr", "rmarkdown"))
 
-  **Conclusion**
+
+**Conclusion**
 
 By combining crime and temperature data, this project reveals valuable insights into the potential impact of temperature on crime patterns. The findings contribute to the understanding of how environmental factors like temperature can influence criminal behavior, which can be useful for law enforcement and urban planning.
