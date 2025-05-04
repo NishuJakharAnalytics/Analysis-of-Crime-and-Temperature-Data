@@ -5,9 +5,7 @@ This project explores the evolving relationship between crime patterns and tempe
 ## 📂 Project Structure
 - `analysis.Rmd`: R Markdown file containing the data exploration, analysis, and visualization steps.
 - `report.pdf`: Report with detailed explanations of findings and visualizations.
-- `README.md`: Overview of the project.
 - `data/`: Folder containing the raw and cleaned datasets.
-- `visualizations/`: Folder containing generated visualizations.
 
 ## 📊 Dataset
 The datasets used in this project include crime and temperature data:
@@ -48,3 +46,7 @@ The datasets are combined to analyze the relationship between temperature trends
   
   ```R
   install.packages(c("tidyverse", "ggplot2", "dplyr", "scales", "knitr", "rmarkdown"))
+
+  **Conclusion**
+
+By combining crime and temperature data, this project reveals valuable insights into the potential impact of temperature on crime patterns. The findings contribute to the understanding of how environmental factors like temperature can influence criminal behavior, which can be useful for law enforcement and urban planning.
